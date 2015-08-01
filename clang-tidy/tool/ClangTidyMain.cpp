@@ -350,6 +350,9 @@ static int MiscModuleAnchorDestination = MiscModuleAnchorSource;
 extern volatile int ReadabilityModuleAnchorSource;
 static int ReadabilityModuleAnchorDestination = ReadabilityModuleAnchorSource;
 
+// This anchor is used to force the linker to link the MongoModule.
+extern volatile int MongoModuleAnchorSource;
+static int MongoModuleAnchorDestination = MongoModuleAnchorSource;
 } // namespace tidy
 } // namespace clang
 
