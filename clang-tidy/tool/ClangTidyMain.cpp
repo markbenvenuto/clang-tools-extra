@@ -579,6 +579,9 @@ extern volatile int HICPPModuleAnchorSource;
 static int LLVM_ATTRIBUTE_UNUSED HICPPModuleAnchorDestination =
     HICPPModuleAnchorSource;
 
+// This anchor is used to force the linker to link the MongoModule.
+extern volatile int MongoModuleAnchorSource;
+static int MongoModuleAnchorDestination = MongoModuleAnchorSource;
 } // namespace tidy
 } // namespace clang
 
