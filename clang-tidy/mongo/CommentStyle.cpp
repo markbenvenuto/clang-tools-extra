@@ -50,7 +50,13 @@ void CommentStyleCheck::check(const MatchFinder::MatchResult &Result) {
             return;
         }
 
-        if (d2->getKind() == Decl::Kind::CXXConstructor)
+
+        if( d2->getKind() == Decl::Kind::CXXConstructor ||  d2->getKind() == Decl::Kind::CXXDestructor) {
+            return;
+        }
+
+        if (d2->isCopyAssignmentOperator() || d2->isMoveAssignmentOperator() ||
+            d2->isImplicit())
             return;
 
         const comments::FullComment *Comment = d2->getASTContext().getLocalCommentForDeclUncached(d2);
