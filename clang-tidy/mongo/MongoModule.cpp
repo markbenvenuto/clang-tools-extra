@@ -16,6 +16,8 @@ class MongoModule: public ClangTidyModule {
         "mongo-comment-style");
     CheckFactories.registerCheck<NamingRulesCheck>(
         "mongo-naming-rules");
+        CheckFactories.registerCheck<IncludeSortOrderCheck>("mongo-include-order");
+
   }
 };
 
