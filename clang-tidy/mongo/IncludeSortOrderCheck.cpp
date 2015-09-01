@@ -96,13 +96,19 @@ void IncludeSortOrderPPCallbacks::InclusionDirective(
     // TODO - what is FileName here - FileName is the file being included
     // TODO: how do we get the name of the file we are processing?
     // SourceManager??
-    #error change this stupid rule
-    ID.IsMainModule = true;
 
-    SM.getFileEntryForID(SM.getMainFileId())
+    FileEntry* fe = SM.getFileEntryForID(SM.getMainFileID());
+    auto name = fe->getName();
+    StringRef srName(name);
 
+    // Remove the .cpp extension
+    StringRef srShort = srName.drop_back(4);
 
-    LookForMainModule = false;
+    // TODO: check it ends with cpp??
+    if(FileNAme.find(srShort) != -1) {
+      ID.IsMainModule = true;
+      LookForMainModule = false;
+    }
   }
   IncludeDirectives.push_back(std::move(ID));
 }
