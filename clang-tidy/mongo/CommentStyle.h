@@ -16,6 +16,12 @@ public:
         SourceManager& mgr,
         bool function);
 
+    void CheckCommentString(const comments::FullComment *Comment,
+        RawComment* raw,
+        SourceLocation loc,
+        SourceManager& mgr,
+        bool function);
+
 };
 
 } // namespace tidy

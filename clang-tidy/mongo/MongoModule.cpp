@@ -4,6 +4,7 @@
 #include "../ClangTidyModuleRegistry.h"
 #include "CommentStyle.h"
 #include "NamingRules.h"
+#include "IncludeSortOrderCheck.h"
 
 
 namespace clang {

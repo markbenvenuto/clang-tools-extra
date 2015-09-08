@@ -11,6 +11,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/PPCallbacks.h"
 #include "clang/Lex/Preprocessor.h"
+#include <string>
 
 namespace clang {
 namespace tidy {
@@ -32,7 +33,7 @@ private:
   struct IncludeDirective {
     SourceLocation Loc;    ///< '#' location in the include directive
     CharSourceRange Range; ///< SourceRange for the file name
-    StringRef Filename;    ///< Filename as a string
+    std::string Filename;    ///< Filename as a string
     bool IsAngled;         ///< true if this was an include with angle brackets
     bool IsMainModule;     ///< true if this was the first include in a file
   };
@@ -51,38 +52,36 @@ void IncludeSortOrderCheck::registerPPCallbacks(CompilerInstance &Compiler) {
 }
 
 static int getPriority(StringRef Filename, bool IsAngled, bool IsMainModule) {
-  // We leave the main module header at the top.
+    // We leave the main module header at the top.
 
-#error Fix this alogith
-
-/*
-    1 : "platform/basic.h header",
-    2 : "matching header for current .cpp file",
-    3 : "boost header",
-    4 : "C++ Standard header",
-    5 : "MongoDB header"
-*/
+    /*
+        1 : "platform/basic.h header",
+        2 : "matching header for current .cpp file",
+        3 : "boost header",
+        4 : "C++ Standard header",
+        5 : "MongoDB header"
+        */
 
     // basic header for windows, optional but first
-    if(Filename.endswith("platform/basic.h"))
-      return 0;
+    if (Filename.endswith("platform/basic.h"))
+        return 0;
 
     // matching header for current .cpp file
-  if (IsMainModule)
-    return 10;
+    if (IsMainModule)
+        return 10;
 
-  // TODO: lint these have <>, not ""
-  // boost headers
-  if (Filename.startswith("boost/") )
-    return 20;
+    // TODO: lint these have <>, not ""
+    // boost headers
+    if (Filename.startswith("boost/"))
+        return 20;
 
 
-  // TODO: lint there no mongo header
-  if( IsAndgled) 
-    return 23;
+    // TODO: lint there no mongo header
+    if (IsAngled)
+        return 23;
 
-  // mongo headers are sorted last
-  return 40;
+    // mongo headers are sorted last
+    return 40;
 }
 
 void IncludeSortOrderPPCallbacks::InclusionDirective(
@@ -93,22 +92,25 @@ void IncludeSortOrderPPCallbacks::InclusionDirective(
   // to leave it in the top position.
   IncludeDirective ID = {HashLoc, FilenameRange, FileName, IsAngled, false};
   if (LookForMainModule && !IsAngled) {
-    // TODO - what is FileName here - FileName is the file being included
-    // TODO: how do we get the name of the file we are processing?
-    // SourceManager??
+      // TODO - what is FileName here - FileName is the file being included
+      // TODO: how do we get the name of the file we are processing?
+      // SourceManager??
 
-    FileEntry* fe = SM.getFileEntryForID(SM.getMainFileID());
-    auto name = fe->getName();
-    StringRef srName(name);
+     const  FileEntry* fe = SM.getFileEntryForID(SM.getMainFileID());
+      auto name = fe->getName();
+      StringRef srName(name);
 
-    // Remove the .cpp extension
-    StringRef srShort = srName.drop_back(4);
+      // Remove the .cpp extension
+      StringRef srShortCpp = srName.drop_back(3);
 
-    // TODO: check it ends with cpp??
-    if(FileNAme.find(srShort) != -1) {
-      ID.IsMainModule = true;
-      LookForMainModule = false;
-    }
+      // Remove .h extension
+      StringRef srShortH = FileName.drop_back(1);
+
+      // TODO: check it ends with cpp and .h?
+      if (srShortCpp.find(srShortH) != -1) {
+          ID.IsMainModule = true;
+          LookForMainModule = false;
+      }
   }
   IncludeDirectives.push_back(std::move(ID));
 }
@@ -148,19 +150,19 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
   // Check blocks are not mixed. We may have many blocks due to ifdefs
   // and such, but just make sure they are not mixed.
   bool mixedBlocks = false;
-  for (unsigned BI = 0, BE = Blocks.size() - 1; BI != BE; ++BI)
-    int begin = IncludeIndices.begin() + Blocks[BI];
+  for (unsigned BI = 0, BE = Blocks.size() - 1; BI != BE; ++BI) {
+    auto begin = Blocks[BI];
     IncludeDirective &LHS = IncludeDirectives[begin];
     int priority = 
           getPriority(LHS.Filename, LHS.IsAngled, LHS.IsMainModule) / 10;
-    int it = begin + 1;
-    while(it < IncludeIndices.begin() + Blocks[BI + 1]) {
+    auto it = begin + 1;
+    while(it < Blocks[BI + 1]) {
     IncludeDirective &RHS = IncludeDirectives[it];
       int second_priority =
-          getPriority(RHS.Filename, RHS.IsAngled, RHS.IsMainModule);
+          getPriority(RHS.Filename, RHS.IsAngled, RHS.IsMainModule) / 10;
 
       if (priority != second_priority) {
-        dig(IncludeDirectives[begin].Loc, "#includes are not grouped correctly into blocks.")
+          Check.diag(IncludeDirectives[begin].Loc, "#includes are not grouped correctly into blocks.");
        mixedBlocks = true; 
       }
       it++;
@@ -193,16 +195,21 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
              std::tie(PriorityRHS, RHS.Filename);
     });
 
+  bool foundBadSort = false;
+
   // Emit a warning for each block and fixits for all changes within that block.
   for (unsigned BI = 0, BE = Blocks.size() - 1; BI != BE; ++BI) {
     // Find the first include that's not in the right position.
     unsigned I, E;
-    for (I = Blocks[BI], E = Blocks[BI + 1]; I != E; ++I)
-      if (IncludeIndices[I] != I)
-        break;
+    for (I = Blocks[BI], E = Blocks[BI + 1]; I != E; ++I) {
+        if (IncludeIndices[I] != I)
+            break;
+    }
 
     if (I == E)
       continue;
+
+    foundBadSort = true;
 
     // Emit a warning.
     auto D = Check.diag(IncludeDirectives[I].Loc,
@@ -230,6 +237,31 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
     }
   }
 
+  // If the local sort is good, check the global sort
+  //
+  // Sort the includes. We first sort by priority, then lexicographically.
+  // NOTE: We do not sort across blocks, so ifdefs and spaces essentially defeat
+  // this code, but it comes close enough
+  // On the plus side, it will never have false negatives.
+  if (!std::is_sorted(IncludeIndices.begin(),
+      IncludeIndices.end(),
+      [this](unsigned LHSI, unsigned RHSI) {
+      IncludeDirective &LHS = IncludeDirectives[LHSI];
+      IncludeDirective &RHS = IncludeDirectives[RHSI];
+
+      int PriorityLHS =
+          getPriority(LHS.Filename, LHS.IsAngled, LHS.IsMainModule);
+      int PriorityRHS =
+          getPriority(RHS.Filename, RHS.IsAngled, RHS.IsMainModule);
+
+      return std::tie(PriorityLHS, LHS.Filename) <
+          std::tie(PriorityRHS, RHS.Filename);
+  })) {
+      // Emit a warning.
+      auto D = Check.diag(IncludeDirectives[0].Loc,
+          "#includes are not sorted properly globally.");
+  }
+  
   IncludeDirectives.clear();
 }
 
