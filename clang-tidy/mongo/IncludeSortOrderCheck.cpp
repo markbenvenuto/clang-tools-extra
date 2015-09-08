@@ -12,6 +12,7 @@
 #include "clang/Lex/PPCallbacks.h"
 #include "clang/Lex/Preprocessor.h"
 #include <string>
+#include <algorithm>
 
 namespace clang {
 namespace tidy {
@@ -35,7 +36,8 @@ private:
     CharSourceRange Range; ///< SourceRange for the file name
     std::string Filename;    ///< Filename as a string
     bool IsAngled;         ///< true if this was an include with angle brackets
-    bool IsMainModule;     ///< true if this was the first include in a file
+    bool IsMainModule;     ///< true if this was the matching h
+    const FileEntry* File;    ///FE
   };
   std::vector<IncludeDirective> IncludeDirectives;
   bool LookForMainModule;
@@ -76,7 +78,7 @@ static int getPriority(StringRef Filename, bool IsAngled, bool IsMainModule) {
         return 20;
 
 
-    // TODO: lint there no mongo header
+    // TODO: lint this is not a mongo header
     if (IsAngled)
         return 23;
 
@@ -90,7 +92,11 @@ void IncludeSortOrderPPCallbacks::InclusionDirective(
     StringRef SearchPath, StringRef RelativePath, const Module *Imported) {
   // We recognize the first include as a special main module header and want
   // to leave it in the top position.
-  IncludeDirective ID = {HashLoc, FilenameRange, FileName, IsAngled, false};
+    auto FID = SM.getFileID(HashLoc);
+
+    IncludeDirective ID = { HashLoc, FilenameRange, FileName, IsAngled, false, SM.getFileEntryForID(FID) };
+
+
   if (LookForMainModule && !IsAngled) {
       // TODO - what is FileName here - FileName is the file being included
       // TODO: how do we get the name of the file we are processing?
@@ -130,6 +136,9 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
 
   // TODO: find duplicated includes.
 
+  // Block includes into the file they are a part of
+  //
+
   // Form blocks of includes. We don't want to sort across blocks. This also
   // implicitly makes us never reorder over #defines or #if directives.
   // FIXME: We should be more careful about sorting below comments as we don't
@@ -162,18 +171,19 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
           getPriority(RHS.Filename, RHS.IsAngled, RHS.IsMainModule) / 10;
 
       if (priority != second_priority) {
-          Check.diag(IncludeDirectives[begin].Loc, "#includes are not grouped correctly into blocks.");
+          Check.diag(RHS.Loc, "#includes are not grouped correctly into blocks.");
        mixedBlocks = true; 
+       break;
       }
       it++;
     }
   }
 
   // Don't bother sorting for the user if the blocks are mixed
-  if( mixedBlocks) {
+  /*if( mixedBlocks) {
       IncludeDirectives.clear();
       return;
-  }
+  }*/
 
   // Sort the includes. We first sort by priority, then lexicographically.
   // NOTE: We do not sort across blocks, so ifdefs and spaces essentially defeat
@@ -243,11 +253,24 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
   // NOTE: We do not sort across blocks, so ifdefs and spaces essentially defeat
   // this code, but it comes close enough
   // On the plus side, it will never have false negatives.
-  if (!std::is_sorted(IncludeIndices.begin(),
-      IncludeIndices.end(),
-      [this](unsigned LHSI, unsigned RHSI) {
-      IncludeDirective &LHS = IncludeDirectives[LHSI];
-      IncludeDirective &RHS = IncludeDirectives[RHSI];
+
+    std::vector<IncludeDirective> GlobalIncludeDirectives;
+    const  FileEntry* fe = SM.getFileEntryForID(SM.getMainFileID());
+    std::copy_if(IncludeDirectives.begin(), IncludeDirectives.end(),
+        std::back_inserter(GlobalIncludeDirectives), [fe](IncludeDirective x) {
+        return x.File == fe; });
+
+// Get a vector of indices.
+std::vector<unsigned>  GlobalIncludeIndices;
+  for (unsigned I = 0, E = GlobalIncludeDirectives.size(); I != E; ++I)
+      GlobalIncludeIndices.push_back(I);
+
+
+  if (!std::is_sorted(GlobalIncludeIndices.begin(),
+      GlobalIncludeIndices.end(),
+      [this, &GlobalIncludeDirectives](unsigned LHSI, unsigned RHSI) {
+      IncludeDirective &LHS = GlobalIncludeDirectives[LHSI];
+      IncludeDirective &RHS = GlobalIncludeDirectives[RHSI];
 
       int PriorityLHS =
           getPriority(LHS.Filename, LHS.IsAngled, LHS.IsMainModule);
@@ -258,7 +281,7 @@ void IncludeSortOrderPPCallbacks::EndOfMainFile() {
           std::tie(PriorityRHS, RHS.Filename);
   })) {
       // Emit a warning.
-      auto D = Check.diag(IncludeDirectives[0].Loc,
+      auto D = Check.diag(GlobalIncludeDirectives[0].Loc,
           "#includes are not sorted properly globally.");
   }
   
