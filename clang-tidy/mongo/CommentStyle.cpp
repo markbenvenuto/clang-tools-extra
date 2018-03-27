@@ -15,7 +15,7 @@ namespace clang {
 namespace tidy {
 void CommentStyleCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(recordDecl().bind("id"), this);
-  Finder->addMatcher(methodDecl(hasAncestor(recordDecl())).bind("id"), this);
+  Finder->addMatcher(cxxMethodDecl(hasAncestor(recordDecl())).bind("id"), this);
 }
 
 

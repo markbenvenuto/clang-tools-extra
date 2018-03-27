@@ -12,7 +12,7 @@ namespace clang {
 namespace tidy {
 void NamingRulesCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(recordDecl().bind("id"), this);
-  Finder->addMatcher(methodDecl(hasAncestor(recordDecl())).bind("id"), this);
+  Finder->addMatcher(cxxMethodDecl(hasAncestor(recordDecl())).bind("id"), this);
   Finder->addMatcher(fieldDecl(hasAncestor(recordDecl())).bind("id"), this);
 }
 
