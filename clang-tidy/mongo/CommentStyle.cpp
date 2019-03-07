@@ -214,7 +214,7 @@ void CommentStyleCheck::check(const MatchFinder::MatchResult &Result) {
         }
 
         if (d2->isCopyAssignmentOperator() || d2->isMoveAssignmentOperator() ||
-            d2->isImplicit())
+            d2->isImplicit() || d2->isOverloadedOperator())
             return;
 
         const comments::FullComment *Comment = d2->getASTContext().getLocalCommentForDeclUncached(d2);
